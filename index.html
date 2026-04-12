@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Chatbot Widget Demo</title>
+  <link rel="stylesheet" href="./chatbot-widget.css" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", sans-serif;
+      color: #e8f0ff;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(60, 130, 255, 0.25), transparent 35%),
+        radial-gradient(circle at 80% 90%, rgba(55, 194, 255, 0.2), transparent 40%),
+        #060c17;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .demo-card {
+      width: min(760px, 100%);
+      border: 1px solid #284067;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #0d1628, #0a1322);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    p {
+      margin: 0;
+      color: #acc1e7;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main class="demo-card">
+    <h1>Existing Website Demo</h1>
+    <p>
+      This page represents your already-built website.
+      The animated chatbot widget is mounted as an overlay.
+    </p>
+  </main>
+
+  <script src="./chatbot-widget.js"></script>
+  <script>
+    ChatbotWidget.mount({
+      title: "Professional Assistant",
+      subtitle: "Ready to assist",
+      welcomeMessage: "Hi there! What can I help you with today?",
+      placeholder: "Type your question...",
+      apiUrl: "http://localhost:4000/api/chat",
+      useEmotionImages: true,
+      hideTranscriptByDefault: true,
+      startTranscriptOpen: false,
+    });
+  </script>
+</body>
+</html>
