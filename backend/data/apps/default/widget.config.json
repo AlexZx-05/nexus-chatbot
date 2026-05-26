@@ -1,0 +1,11 @@
+{
+  "title": "Campus Assistant",
+  "subtitle": "Admissions & Student Help",
+  "placeholder": "Ask about admission, fees, hostel, timetable...",
+  "welcomeMessage": "Hello! I can guide you with admissions, fees, and student support.",
+  "returningGreeting": "Welcome back. What would you like help with today?",
+  "apiUrl": "/api/apps/default/chat",
+  "useEmotionImages": true,
+  "hideTranscriptByDefault": true,
+  "startTranscriptOpen": false
+}

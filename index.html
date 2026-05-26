@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Chatbot Widget Demo</title>
-  <link rel="stylesheet" href="./chatbot-widget.css" />
+  <link rel="stylesheet" href="./chatbot-widget.css?v=rightfix-15" />
   <style>
     body {
       margin: 0;
@@ -50,13 +50,13 @@
     </p>
   </main>
 
-  <script src="./chatbot-widget.js"></script>
+  <script src="./chatbot-widget.js?v=rightfix-7"></script>
   <script>
     ChatbotWidget.mount({
       title: "Professional Assistant",
       subtitle: "Ready to assist",
       welcomeMessage: "Hi there! What can I help you with today?",
-      placeholder: "Type your question...",
+      placeholder: "",
       apiUrl: "http://localhost:4000/api/chat",
       useEmotionImages: true,
       hideTranscriptByDefault: true,

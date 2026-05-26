@@ -1,112 +1,156 @@
-# Drop-In Animated Chatbot (Level 2)
+# Multi-App Chatbot Platform (Implementation-Ready, 2026)
 
-This project gives you a professional, integration-ready chatbot widget for an existing website with:
+This setup is production-style for reuse across many applications.
 
-- `idle` animation state
-- `thinking` animation state
-- `talking` animation state
-- smooth UI transitions
-- easy backend integration
+You only do 2 things for each new application:
 
-## Files
+1. Create app data files (`knowledge.base.json` + `widget.config.json`)
+2. Mount widget with appId (or config URL)
 
-- `chatbot-widget.css`
-- `chatbot-widget.js`
-- `index.html` (demo host website)
+No widget code changes per app.
 
-## Quick Integration Into Any Existing Website
+## Core idea
 
-1. Copy `chatbot-widget.css` and `chatbot-widget.js` into your website assets.
-2. Add these in your website HTML:
+- One shared widget (`chatbot-widget.js` / `chatbot-widget.css`)
+- One backend
+- Multiple app tenants via `appId`
+- App-specific responses from app-specific data files
+
+## Folder structure (per app)
+
+`backend/data/apps/<appId>/knowledge.base.json`
+`backend/data/apps/<appId>/widget.config.json`
+
+Examples included:
+
+- `backend/data/apps/default/`
+- `backend/data/apps/ecommerce/`
+
+## API routes
+
+- `GET /api/apps/:appId/config`
+- `POST /api/apps/:appId/chat`
+
+Backward-compatible default routes:
+
+- `GET /api/config` -> uses `DEFAULT_APP_ID` (default: `default`)
+- `POST /api/chat` -> uses `DEFAULT_APP_ID`
+
+## Professional integration (recommended)
+
+Add assets:
 
 ```html
 <link rel="stylesheet" href="/assets/chatbot-widget.css" />
 <script src="/assets/chatbot-widget.js"></script>
 ```
 
-3. Mount the chatbot near the end of your page:
+Mount by appId:
 
 ```html
 <script>
-  ChatbotWidget.mount({
-    container: "body",
-    title: "Campus Assistant",
-    subtitle: "Online now",
-    welcomeMessage: "Hi! Ask me anything about college support.",
-    placeholder: "Ask your question...",
+  ChatbotWidget.mountForApp({
+    baseUrl: "https://chat-api.yourcompany.com",
+    appId: "ecommerce"
   });
 </script>
 ```
 
-## Connect To Your Real Chatbot API
-
-If your backend already exists, pass `apiUrl`:
+Mount by direct config URL:
 
 ```html
 <script>
-  ChatbotWidget.mount({
-    apiUrl: "https://your-domain.com/api/chat",
-  });
+  ChatbotWidget.mountFromConfigUrl("https://chat-api.yourcompany.com/api/apps/ecommerce/config");
 </script>
 ```
 
-The widget sends:
+## One-line embed (any website)
+
+Use this on any external website where you want the bot:
+
+```html
+<script src="https://chat-api.yourcompany.com/assets/chatbot-widget.js" data-app-id="ecommerce" data-base-url="https://chat-api.yourcompany.com"></script>
+```
+
+That single line auto-loads the widget, fetches the app config/data, and mounts the bot.
+
+Optional attributes:
+
+- `data-app-id="your-app-id"` (required for app-based mounting)
+- `data-base-url="https://chat-api.yourcompany.com"` (recommended)
+- `data-config-url="https://chat-api.yourcompany.com/api/apps/ecommerce/config"` (alternative to `data-app-id`)
+- `data-auto-mount="false"` (disable auto mount if you want manual JS mounting)
+
+## Admin dashboard MVP
+
+Run the backend, then open:
+
+```text
+http://localhost:4000/admin
+```
+
+From there you can:
+
+- Create a new chatbot app
+- Add FAQ/keyword knowledge
+- Add website source URLs for tracking client data sources
+- Customize widget title, welcome text, placeholder, and fallback reply
+- Add custom image URLs for each chatbot emotion
+- Copy the final one-line embed code for the client website
+
+## Create a new application chatbot
+
+1. Create folder:
+
+`backend/data/apps/finance-app/`
+
+2. Add `knowledge.base.json`:
 
 ```json
 {
-  "message": "user input",
-  "history": [
-    { "role": "bot", "text": "..." },
-    { "role": "user", "text": "..." }
+  "appName": "Finance Assistant",
+  "fallbackReply": "I can help with statements, transfers, and card support.",
+  "fallbackEmotion": "neutral",
+  "intents": [
+    {
+      "id": "card_block",
+      "keywords": ["block card", "lost card", "stolen card"],
+      "reply": "For urgent card block, verify last 4 digits and registered mobile.",
+      "emotion": "error"
+    }
   ]
 }
 ```
 
-Expected backend response:
+3. Add `widget.config.json`:
 
 ```json
 {
-  "reply": "assistant response"
+  "title": "Finance Help",
+  "subtitle": "Secure Support",
+  "placeholder": "Ask about cards, transfers, statements...",
+  "welcomeMessage": "Hi. I can help with your banking support requests.",
+  "apiUrl": "/api/apps/finance-app/chat",
+  "useEmotionImages": true,
+  "hideTranscriptByDefault": true,
+  "startTranscriptOpen": false
 }
 ```
 
-## Custom Behavior Function (Without `apiUrl`)
-
-You can supply `onSend` for custom logic:
+4. In that application website:
 
 ```html
 <script>
-  ChatbotWidget.mount({
-    onSend: async (message, history) => {
-      return "Custom response for: " + message;
-    }
+  ChatbotWidget.mountForApp({
+    baseUrl: "https://chat-api.yourcompany.com",
+    appId: "finance-app"
   });
 </script>
 ```
 
-## Run Demo Locally
+## Run locally
 
-Open `index.html` in browser.
-
-## Emotion PNG Setup (Frontend + Backend)
-
-Put your emotion PNG images in:
-
-- `assets/emotions/original/neutral.png`
-- `assets/emotions/original/welcome.png`
-- `assets/emotions/original/listening.png`
-- `assets/emotions/original/thinking.png`
-- `assets/emotions/original/speaking.png`
-- `assets/emotions/original/confused.png`
-- `assets/emotions/original/error.png`
-
-The widget is already configured to load these names and switch by scenario.
-
-### Backend integration
-
-Sample backend is available in `backend/`.
-
-Run:
+Backend:
 
 ```bash
 cd backend
@@ -114,79 +158,45 @@ npm install
 npm start
 ```
 
-Backend endpoint:
+Frontend demo:
 
-- `POST http://localhost:4000/api/chat`
+```bash
+cd ..
+python -m http.server 3000
+```
 
-Backend should return:
+Open:
+
+- `http://localhost:3000`
+
+## Environment variables
+
+- `PORT` (default `4000`)
+- `DEFAULT_APP_ID` (default `default`)
+- `APPS_ROOT` (default `backend/data/apps`)
+- `KNOWLEDGE_SOURCE` (optional global override path/url)
+- `WIDGET_CONFIG_SOURCE` (optional global override path/url)
+
+## Response contract
+
+Request:
 
 ```json
 {
-  "reply": "text response",
-  "emotion": "welcome"
+  "message": "Where is my order?",
+  "history": [
+    { "role": "bot", "text": "..." },
+    { "role": "user", "text": "..." }
+  ]
 }
 ```
 
----
+Response:
 
-# Level 3 Roadmap (Advanced: 3D + Eye Tracking)
-
-This is the next upgrade after the current Level 2 widget.
-
-## What You Get
-
-- Eyes follow cursor (`raycast` + target tracking) 👀
-- Head movement (yaw/pitch with smoothing)
-- Fully dynamic character states (`idle`, `thinking`, `talking`, `listening`)
-- Real 3D scene with lighting/shadows
-
-## Estimated Time
-
-- Total: `2-3 weeks`
-
-## Breakdown
-
-1. Learn Three.js fundamentals: `3-5 days`
-2. Build or import 3D model (`.glb/.gltf`): `3-4 days`
-3. Interaction logic (eye/head tracking + chat state sync): `4-5 days`
-4. Debugging and polish (performance, mobile, edge cases): `3-5 days`
-
-## Suggested Stack
-
-- `three` (core 3D engine)
-- `@react-three/fiber` (if using React)
-- `@react-three/drei` helpers (orbit controls, loaders, utilities)
-- `gsap` or spring-based animation for smooth motion
-- `gltfjsx` / Blender for model pipeline
-
-## Architecture Plan
-
-1. `scene/`:
-   - camera, renderer, lights, environment
-2. `character/`:
-   - load model + named bones/meshes (`head`, `eye_L`, `eye_R`, `arm_L`, `arm_R`)
-3. `logic/trackCursor`:
-   - convert mouse to normalized device coords
-   - map to look-target object
-4. `logic/states`:
-   - map chatbot state to animation clips or procedural transforms
-5. `ui-bridge`:
-   - connect current chat events to 3D character controller
-
-## Milestone Definition
-
-- Week 1 end:
-  - model loads, camera setup, lights, idle animation
-- Week 2 mid:
-  - eyes track cursor, head follows naturally, state transitions wired
-- Week 2 end or Week 3:
-  - arms/hand gestures polished, FPS stable, mobile fallback complete
-
-## Quality Targets
-
-- `>= 45 FPS` on mid-tier laptops
-- Smooth eye/head interpolation (no jitter)
-- Interaction latency under `120ms` for visible response
-- Graceful fallback to Level 2 widget when WebGL is unavailable
-
-This level is startup-grade and strong for portfolio/demo value.
+```json
+{
+  "reply": "To track your order, share your order ID...",
+  "emotion": "thinking",
+  "appId": "ecommerce"
+}
+```

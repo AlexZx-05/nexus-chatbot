@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatbot Platform Admin</title>
+  <style>
+    :root {
+      --bg: #eef3f8;
+      --panel: #ffffff;
+      --panel-soft: #f7f9fc;
+      --text: #162033;
+      --muted: #697789;
+      --line: #dbe3ee;
+      --accent: #1769e0;
+      --accent-dark: #0e4ea8;
+      --ok: #0f7a55;
+      --shadow: 0 18px 45px rgba(25, 39, 62, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: #101827;
+      color: #edf4ff;
+      padding: 24px;
+    }
+
+    .brand {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .sidebar p {
+      margin: 0 0 24px;
+      color: #a9b6c8;
+      line-height: 1.5;
+      font-size: 13px;
+    }
+
+    .app-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .app-pill {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      color: #edf4ff;
+      border-radius: 8px;
+      padding: 11px 12px;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .content {
+      padding: 28px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+
+    .status {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 750;
+      color: #344256;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      padding: 11px 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: #8bb9f4;
+      box-shadow: 0 0 0 3px rgba(23, 105, 224, 0.12);
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    .faq-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .faq-row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .faq-actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+      padding: 11px 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #e8eef7;
+      color: #21324a;
+    }
+
+    button.danger {
+      background: #f1e7e7;
+      color: #8a2930;
+      padding: 8px 10px;
+    }
+
+    button:hover {
+      filter: brightness(0.97);
+    }
+
+    .embed-box {
+      background: #101827;
+      color: #eaf2ff;
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 130px;
+      overflow: auto;
+      font: 13px/1.6 Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .preview-note {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 13px;
+      margin: 10px 0 0;
+    }
+
+    .image-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .success {
+      color: var(--ok);
+      font-weight: 750;
+    }
+
+    @media (max-width: 980px) {
+      .shell,
+      .grid,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <aside class="sidebar">
+      <div class="brand">Chatbot Platform</div>
+      <p>Create a chatbot, feed business data, customize the widget, and copy the embed code.</p>
+      <div id="appList" class="app-list"></div>
+    </aside>
+
+    <section class="content">
+      <div class="topbar">
+        <div>
+          <h1>Build chatbot</h1>
+          <div id="status" class="status">Ready</div>
+        </div>
+        <button class="secondary" id="newBtn" type="button">New app</button>
+      </div>
+
+      <div class="grid">
+        <form id="appForm" class="card">
+          <h2>App and widget details</h2>
+          <div class="form-grid">
+            <label>
+              App ID
+              <input id="appId" placeholder="e.g. fashion-store" required />
+            </label>
+            <label>
+              App name
+              <input id="appName" placeholder="Fashion Store Assistant" required />
+            </label>
+            <label>
+              Widget title
+              <input id="title" placeholder="Store Help" required />
+            </label>
+            <label>
+              Subtitle
+              <input id="subtitle" placeholder="Orders, returns, payments" />
+            </label>
+            <label class="full">
+              Welcome message
+              <input id="welcomeMessage" placeholder="Hi. I can help with your shopping questions." />
+            </label>
+            <label class="full">
+              Input placeholder
+              <input id="placeholder" placeholder="Ask about orders, returns, payments..." />
+            </label>
+            <label class="full">
+              Fallback answer
+              <textarea id="fallbackReply" placeholder="I can help with orders, returns, delivery, and payments. Please share more details."></textarea>
+            </label>
+            <label class="full">
+              Website URLs or sources
+              <textarea id="sources" placeholder="https://example.com/faq&#10;https://example.com/pricing"></textarea>
+            </label>
+          </div>
+
+          <h2 style="margin-top: 18px;">Knowledge items</h2>
+          <div id="faqList" class="faq-list"></div>
+          <div class="button-row">
+            <button class="secondary" id="addFaqBtn" type="button">Add FAQ</button>
+          </div>
+
+          <h2 style="margin-top: 18px;">Chatbot images</h2>
+          <div class="image-grid">
+            <label>Neutral image URL <input id="imgNeutral" placeholder="https://..." /></label>
+            <label>Welcome image URL <input id="imgWelcome" placeholder="https://..." /></label>
+            <label>Listening image URL <input id="imgListening" placeholder="https://..." /></label>
+            <label>Thinking image URL <input id="imgThinking" placeholder="https://..." /></label>
+            <label>Speaking image URL <input id="imgSpeaking" placeholder="https://..." /></label>
+            <label>Confused image URL <input id="imgConfused" placeholder="https://..." /></label>
+            <label>Error image URL <input id="imgError" placeholder="https://..." /></label>
+          </div>
+
+          <div class="button-row">
+            <button type="submit">Create / update chatbot</button>
+            <button class="secondary" id="copyBtn" type="button">Copy embed code</button>
+          </div>
+        </form>
+
+        <aside class="card">
+          <h2>Embed code</h2>
+          <div id="embedCode" class="embed-box">Create or load an app to generate embed code.</div>
+          <p class="preview-note">Paste this script before the closing body tag of the target website. The app ID keeps every client's data separate.</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const appListEl = document.getElementById("appList");
+    const faqListEl = document.getElementById("faqList");
+    const embedCodeEl = document.getElementById("embedCode");
+
+    const fields = {
+      appId: document.getElementById("appId"),
+      appName: document.getElementById("appName"),
+      title: document.getElementById("title"),
+      subtitle: document.getElementById("subtitle"),
+      welcomeMessage: document.getElementById("welcomeMessage"),
+      placeholder: document.getElementById("placeholder"),
+      fallbackReply: document.getElementById("fallbackReply"),
+      sources: document.getElementById("sources"),
+      imgNeutral: document.getElementById("imgNeutral"),
+      imgWelcome: document.getElementById("imgWelcome"),
+      imgListening: document.getElementById("imgListening"),
+      imgThinking: document.getElementById("imgThinking"),
+      imgSpeaking: document.getElementById("imgSpeaking"),
+      imgConfused: document.getElementById("imgConfused"),
+      imgError: document.getElementById("imgError"),
+    };
+
+    function setStatus(message, ok) {
+      statusEl.textContent = message;
+      statusEl.className = ok ? "status success" : "status";
+    }
+
+    function makeFaqRow(intent) {
+      const row = document.createElement("div");
+      row.className = "faq-row";
+      row.innerHTML = `
+        <label>Keywords, comma separated <input class="faq-keywords" placeholder="shipping, delivery, order status" /></label>
+        <label>Answer <textarea class="faq-reply" placeholder="Write the answer visitors should receive."></textarea></label>
+        <label>Emotion
+          <select class="faq-emotion">
+            <option value="neutral">Neutral</option>
+            <option value="welcome">Welcome</option>
+            <option value="thinking">Thinking</option>
+            <option value="speaking">Speaking</option>
+            <option value="confused">Confused</option>
+            <option value="error">Error</option>
+          </select>
+        </label>
+        <div class="faq-actions"><button class="danger" type="button">Remove</button></div>
+      `;
+      row.querySelector(".faq-keywords").value = (intent && intent.keywords ? intent.keywords : []).join(", ");
+      row.querySelector(".faq-reply").value = intent && intent.reply ? intent.reply : "";
+      row.querySelector(".faq-emotion").value = intent && intent.emotion ? intent.emotion : "neutral";
+      row.querySelector(".danger").addEventListener("click", () => row.remove());
+      faqListEl.appendChild(row);
+    }
+
+    function getFaqs() {
+      return Array.from(faqListEl.querySelectorAll(".faq-row")).map((row, index) => ({
+        id: `intent_${index + 1}`,
+        keywords: row.querySelector(".faq-keywords").value.split(",").map((item) => item.trim()).filter(Boolean),
+        reply: row.querySelector(".faq-reply").value.trim(),
+        emotion: row.querySelector(".faq-emotion").value,
+      })).filter((item) => item.keywords.length && item.reply);
+    }
+
+    function getPayload() {
+      return {
+        appId: fields.appId.value.trim().toLowerCase(),
+        appName: fields.appName.value.trim(),
+        title: fields.title.value.trim(),
+        subtitle: fields.subtitle.value.trim(),
+        welcomeMessage: fields.welcomeMessage.value.trim(),
+        placeholder: fields.placeholder.value.trim(),
+        fallbackReply: fields.fallbackReply.value.trim(),
+        fallbackEmotion: "neutral",
+        sources: fields.sources.value.split("\n").map((item) => item.trim()).filter(Boolean),
+        intents: getFaqs(),
+        emotionImages: {
+          neutral: fields.imgNeutral.value.trim(),
+          welcome: fields.imgWelcome.value.trim(),
+          listening: fields.imgListening.value.trim(),
+          thinking: fields.imgThinking.value.trim(),
+          speaking: fields.imgSpeaking.value.trim(),
+          confused: fields.imgConfused.value.trim(),
+          error: fields.imgError.value.trim(),
+        },
+      };
+    }
+
+    function fillForm(data) {
+      const config = data.config || {};
+      const knowledge = data.knowledge || {};
+      const images = config.emotionImages || {};
+      fields.appId.value = data.appId || "";
+      fields.appName.value = knowledge.appName || "";
+      fields.title.value = config.title || "";
+      fields.subtitle.value = config.subtitle || "";
+      fields.welcomeMessage.value = config.welcomeMessage || "";
+      fields.placeholder.value = config.placeholder || "";
+      fields.fallbackReply.value = knowledge.fallbackReply || "";
+      fields.sources.value = (knowledge.sources || []).join("\n");
+      fields.imgNeutral.value = images.neutral || "";
+      fields.imgWelcome.value = images.welcome || "";
+      fields.imgListening.value = images.listening || "";
+      fields.imgThinking.value = images.thinking || "";
+      fields.imgSpeaking.value = images.speaking || "";
+      fields.imgConfused.value = images.confused || "";
+      fields.imgError.value = images.error || "";
+      faqListEl.innerHTML = "";
+      (knowledge.intents || []).forEach(makeFaqRow);
+      if (!faqListEl.children.length) {
+        makeFaqRow();
+      }
+      embedCodeEl.textContent = data.embedCode || "Embed code will appear here.";
+    }
+
+    async function loadApps() {
+      const response = await fetch("/api/apps");
+      const data = await response.json();
+      appListEl.innerHTML = "";
+      (data.apps || []).forEach((app) => {
+        const button = document.createElement("button");
+        button.className = "app-pill";
+        button.type = "button";
+        button.textContent = `${app.title || app.appId} (${app.appId})`;
+        button.addEventListener("click", () => loadApp(app.appId));
+        appListEl.appendChild(button);
+      });
+    }
+
+    async function loadApp(appId) {
+      setStatus("Loading app...");
+      const response = await fetch(`/api/apps/${encodeURIComponent(appId)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setStatus(data.error || "Failed to load app");
+        return;
+      }
+      fillForm(data);
+      setStatus("App loaded", true);
+    }
+
+    document.getElementById("appForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setStatus("Creating chatbot...");
+      const response = await fetch("/api/apps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(getPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setStatus(data.error || "Failed to create chatbot");
+        return;
+      }
+      fillForm(data);
+      await loadApps();
+      setStatus("Chatbot ready. Embed code generated.", true);
+    });
+
+    document.getElementById("addFaqBtn").addEventListener("click", () => makeFaqRow());
+    document.getElementById("newBtn").addEventListener("click", () => {
+      document.getElementById("appForm").reset();
+      faqListEl.innerHTML = "";
+      makeFaqRow();
+      embedCodeEl.textContent = "Create or load an app to generate embed code.";
+      setStatus("Ready");
+    });
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(embedCodeEl.textContent);
+      setStatus("Embed code copied", true);
+    });
+
+    makeFaqRow();
+    loadApps().catch(() => setStatus("Could not load apps"));
+  </script>
+</body>
+</html>

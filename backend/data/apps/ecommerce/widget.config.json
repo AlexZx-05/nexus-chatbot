@@ -1,0 +1,13 @@
+{
+  "title": "ShopSmart Help",
+  "subtitle": "Orders, Returns, Delivery",
+  "placeholder": "Ask about orders, returns, payments...",
+  "welcomeMessage": "Hi! I can help with your shopping support queries.",
+  "returningGreeting": "Welcome back. Need help with an order?",
+  "apiUrl": "/api/apps/ecommerce/chat",
+  "useEmotionImages": true,
+  "hideTranscriptByDefault": false,
+  "startTranscriptOpen": true,
+  "startMinimized": false,
+  "dockLeft": false
+}

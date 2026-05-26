@@ -3,6 +3,16 @@
 
   const FALLBACK_GREETING = "Hi there! What can I help you with today?";
   const FALLBACK_RETURNING_GREETING = "I see you've come back. Welcome again!";
+  const DEFAULT_EMOTION_RELATIVE_PATH = "./assets/emotions/original";
+  const DEFAULT_EMOTION_FILES = {
+    neutral: "welcome.png",
+    welcome: "welcome.png",
+    listening: "listening.png",
+    thinking: "thinking.png",
+    speaking: "speaking.png",
+    confused: "confused.png",
+    error: "error.png",
+  };
   const VALID_EMOTIONS = new Set([
     "neutral",
     "welcome",
@@ -150,6 +160,7 @@
     wrapper.dataset.emotion = "neutral";
     wrapper.dataset.avatarMode = config.useEmotionImages ? "image" : "robot";
     wrapper.dataset.minimized = String(Boolean(config.startMinimized));
+    wrapper.dataset.docked = "false";
     wrapper.dataset.transcriptOpen = String(
       config.hideTranscriptByDefault ? Boolean(config.startTranscriptOpen) : true
     );
@@ -205,8 +216,14 @@
       <div class="cb-status"></div>
       <div class="cb-controls-row cb-controls-row-composer">
         <form class="cb-input-row">
+          <button class="cb-attach" type="button" aria-label="Attach file" title="Attach">
+            <span class="cb-attach-icon">+</span>
+          </button>
           <input class="cb-input" type="text" placeholder="${config.placeholder}" />
-          <button class="cb-send" type="submit">Send</button>
+          <button class="cb-send" type="submit" aria-label="Send message">
+            <span class="cb-send-label">Send</span>
+            <span class="cb-send-icon">&#10148;</span>
+          </button>
         </form>
       </div>
     `;
@@ -226,22 +243,17 @@
   function normalizeConfig(options) {
     const opts = options || {};
     const emotionImages = Object.assign(
-      {
-        neutral: "./assets/emotions/original/welcome.png",
-        welcome: "./assets/emotions/original/welcome.png",
-        listening: "./assets/emotions/original/listening.png",
-        thinking: "./assets/emotions/original/thinking.png",
-        speaking: "./assets/emotions/original/speaking.png",
-        confused: "./assets/emotions/original/confused.png",
-        error: "./assets/emotions/original/error.png",
-      },
+      buildEmotionImages(),
       opts.emotionImages || {}
     );
     return {
       container: opts.container || "body",
       title: opts.title || "Professional Assistant",
       subtitle: opts.subtitle || "Ready to assist",
-      placeholder: opts.placeholder || "Type your question...",
+      placeholder:
+        typeof opts.placeholder === "string" && opts.placeholder.trim()
+          ? opts.placeholder
+          : "Type your message...",
       welcomeMessage: opts.welcomeMessage || FALLBACK_GREETING,
       returningGreeting: opts.returningGreeting || FALLBACK_RETURNING_GREETING,
       enableReturnGreeting: opts.enableReturnGreeting !== false,
@@ -253,6 +265,8 @@
       hideTranscriptByDefault: opts.hideTranscriptByDefault !== false,
       typingSpeed: Number(opts.typingSpeed || 18),
       thinkingDelayMs: Number(opts.thinkingDelayMs || 700),
+      comicHideDelayMs: Number(opts.comicHideDelayMs || 2200),
+      dockDelayMs: Number(opts.dockDelayMs || 4200),
       onSend: typeof opts.onSend === "function" ? opts.onSend : null,
       apiUrl: typeof opts.apiUrl === "string" && opts.apiUrl.trim() ? opts.apiUrl.trim() : null,
     };
@@ -276,6 +290,149 @@
     };
   }
 
+  function trimTrailingSlash(value) {
+    return String(value || "").replace(/\/+$/, "");
+  }
+
+  function buildEmotionImages(baseUrl) {
+    const root = baseUrl
+      ? `${trimTrailingSlash(baseUrl)}/assets/emotions/original`
+      : DEFAULT_EMOTION_RELATIVE_PATH;
+    return {
+      neutral: `${root}/${DEFAULT_EMOTION_FILES.neutral}`,
+      welcome: `${root}/${DEFAULT_EMOTION_FILES.welcome}`,
+      listening: `${root}/${DEFAULT_EMOTION_FILES.listening}`,
+      thinking: `${root}/${DEFAULT_EMOTION_FILES.thinking}`,
+      speaking: `${root}/${DEFAULT_EMOTION_FILES.speaking}`,
+      confused: `${root}/${DEFAULT_EMOTION_FILES.confused}`,
+      error: `${root}/${DEFAULT_EMOTION_FILES.error}`,
+    };
+  }
+
+  function mergeEmotionImages(config, baseUrl) {
+    return Object.assign({}, config || {}, {
+      emotionImages: Object.assign(
+        {},
+        buildEmotionImages(baseUrl),
+        (config && config.emotionImages) || {}
+      ),
+    });
+  }
+
+  function injectStylesheet(href) {
+    if (!href || typeof document === "undefined") {
+      return;
+    }
+    const id = `cb-widget-css-${href}`;
+    if (document.querySelector(`link[data-cb-widget-id="${id}"]`)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.dataset.cbWidgetId = id;
+    document.head.appendChild(link);
+  }
+
+  async function fetchRemoteConfig(configUrl) {
+    const response = await fetch(configUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load widget config (${response.status})`);
+    }
+    return response.json();
+  }
+
+  function mountForApp(options) {
+    const opts = options || {};
+    const appId = String(opts.appId || "").trim();
+    if (!appId) {
+      throw new Error("mountForApp requires appId.");
+    }
+    const baseUrl = trimTrailingSlash(opts.baseUrl || "");
+    if (!baseUrl) {
+      throw new Error("mountForApp requires baseUrl.");
+    }
+
+    const configUrl = `${baseUrl}/api/apps/${encodeURIComponent(appId)}/config`;
+    const cssUrl = opts.cssUrl || `${baseUrl}/assets/chatbot-widget.css`;
+    injectStylesheet(cssUrl);
+
+    return fetchRemoteConfig(configUrl).then((remoteConfig) =>
+      mountChatbot(
+        Object.assign({}, remoteConfig || {}, opts.overrides || {}, {
+          apiUrl: `${baseUrl}/api/apps/${encodeURIComponent(appId)}/chat`,
+          emotionImages: Object.assign(
+            {},
+            buildEmotionImages(baseUrl),
+            (remoteConfig && remoteConfig.emotionImages) || {},
+            (opts.overrides && opts.overrides.emotionImages) || {}
+          ),
+        })
+      )
+    );
+  }
+
+  function mountFromConfigUrl(configUrl, overrides) {
+    const url = String(configUrl || "").trim();
+    if (!url) {
+      throw new Error("mountFromConfigUrl requires a config URL.");
+    }
+    const configOrigin = new URL(url, window.location.href).origin;
+    injectStylesheet(`${trimTrailingSlash(configOrigin)}/assets/chatbot-widget.css`);
+
+    return fetchRemoteConfig(url).then((remoteConfig) => {
+      const finalConfig = Object.assign({}, remoteConfig || {}, overrides || {});
+      return mountChatbot(mergeEmotionImages(finalConfig, configOrigin));
+    });
+  }
+
+  function autoMountFromScriptTag() {
+    const scripts = Array.from(document.querySelectorAll("script[src]"));
+    const script = scripts
+      .slice()
+      .reverse()
+      .find((tag) => /chatbot-widget\.js/i.test(tag.getAttribute("src") || ""));
+    if (!script) {
+      return;
+    }
+
+    const appId = (script.dataset.appId || "").trim();
+    const configUrl = (script.dataset.configUrl || "").trim();
+    const baseUrl = trimTrailingSlash(
+      script.dataset.baseUrl ||
+        (() => {
+          try {
+            return new URL(script.src, window.location.href).origin;
+          } catch (error) {
+            return "";
+          }
+        })()
+    );
+    const cssUrl = (script.dataset.cssUrl || "").trim();
+    const autoMountFlag = String(script.dataset.autoMount || "true").toLowerCase() !== "false";
+
+    if (!autoMountFlag) {
+      return;
+    }
+    if (!appId && !configUrl) {
+      return;
+    }
+
+    if (configUrl) {
+      mountFromConfigUrl(configUrl).catch((error) => {
+        console.error("Chatbot auto-mount failed (configUrl):", error);
+      });
+      return;
+    }
+
+    mountForApp({ baseUrl, appId, cssUrl: cssUrl || `${baseUrl}/assets/chatbot-widget.css` }).catch((error) => {
+      console.error("Chatbot auto-mount failed (appId):", error);
+    });
+  }
+
   function mountChatbot(options) {
     const config = normalizeConfig(options);
     const container = resolveContainer(config.container);
@@ -284,11 +441,15 @@
     }
 
     const widget = buildWidgetShell(config);
+    widget.style.right = "24px";
+    widget.style.left = "auto";
+    widget.style.bottom = "24px";
     const body = widget.querySelector(".cb-body");
     const status = widget.querySelector(".cb-status");
     const form = widget.querySelector(".cb-input-row");
     const input = widget.querySelector(".cb-input");
     const sendBtn = widget.querySelector(".cb-send");
+    const attachBtn = widget.querySelector(".cb-attach");
     const toggleBtn = widget.querySelector(".cb-toggle");
     const transcriptToggleBtn = widget.querySelector(".cb-transcript-toggle");
     const avatarImage = widget.querySelector(".cb-avatar-image");
@@ -297,6 +458,8 @@
     const history = [];
     let busy = false;
     let welcomeTimer = null;
+    let comicHideTimer = null;
+    let dockTimer = null;
 
     function scrollToBottom() {
       body.scrollTop = body.scrollHeight;
@@ -307,6 +470,64 @@
         comicBubble.textContent = String(text || "");
         comicBubble.classList.remove("cb-comic-bubble-hidden");
       }
+    }
+
+    function hideComicText() {
+      if (comicBubble) {
+        comicBubble.classList.add("cb-comic-bubble-hidden");
+      }
+    }
+
+    function resetClosedIdleState() {
+      if (comicHideTimer) {
+        clearTimeout(comicHideTimer);
+        comicHideTimer = null;
+      }
+      hideComicText();
+      widget.dataset.state = "idle";
+      status.textContent = "Ready";
+      setEmotion("neutral");
+    }
+
+    function clearDockTimer() {
+      if (dockTimer) {
+        clearTimeout(dockTimer);
+        dockTimer = null;
+      }
+    }
+
+    function showDockedWidget() {
+      clearDockTimer();
+      widget.dataset.docked = "false";
+    }
+
+    function scheduleDock(delayMs) {
+      clearDockTimer();
+      const safeDelay = Number(delayMs);
+      if (!(safeDelay > 0)) {
+        return;
+      }
+      dockTimer = setTimeout(() => {
+        if (!busy && widget.dataset.transcriptOpen === "false") {
+          widget.dataset.docked = "true";
+        }
+      }, safeDelay);
+    }
+
+    function scheduleComicHide(delayMs) {
+      if (comicHideTimer) {
+        clearTimeout(comicHideTimer);
+        comicHideTimer = null;
+      }
+      const safeDelay = Number(delayMs);
+      if (!(safeDelay > 0)) {
+        return;
+      }
+      comicHideTimer = setTimeout(() => {
+        if (!busy && widget.dataset.state === "idle") {
+          hideComicText();
+        }
+      }, safeDelay);
     }
 
     function resolveInitialGreeting() {
@@ -355,6 +576,7 @@
         setEmotion("listening");
         status.textContent = "Listening...";
         setComicText("I'm listening...");
+        scheduleComicHide(config.comicHideDelayMs);
         return;
       }
       if (widget.dataset.state === "idle") {
@@ -379,6 +601,7 @@
       status.textContent = statusText || "";
       if (nextState === "thinking") {
         setComicText("Let me think...");
+        scheduleComicHide(config.comicHideDelayMs);
       }
     }
 
@@ -390,6 +613,7 @@
       scrollToBottom();
       if (role === "bot" && value) {
         setComicText(value);
+        scheduleComicHide(config.comicHideDelayMs);
       }
       return bubble;
     }
@@ -494,12 +718,18 @@
     toggleBtn.addEventListener("click", () => {
       widget.dataset.minimized = "false";
       widget.dataset.transcriptOpen = "false";
+      showDockedWidget();
+      resetClosedIdleState();
+      scheduleDock(900);
       syncTranscriptToggle();
     });
 
     transcriptToggleBtn.addEventListener("click", () => {
-      const isOpen = widget.dataset.transcriptOpen === "true";
-      widget.dataset.transcriptOpen = String(!isOpen);
+      showDockedWidget();
+      widget.dataset.transcriptOpen = "true";
+      if (!busy) {
+        hideComicText();
+      }
       syncTranscriptToggle();
     });
 
@@ -524,12 +754,21 @@
     }
 
     form.addEventListener("submit", handleSubmit);
+    if (attachBtn) {
+      attachBtn.addEventListener("click", () => {
+        input.focus();
+      });
+    }
     container.appendChild(widget);
     syncTranscriptToggle();
     const initialGreeting = resolveInitialGreeting();
     pushMessage(initialGreeting, "bot");
     setState("idle", "Ready", "welcome");
     setComicText(initialGreeting);
+    scheduleComicHide(config.comicHideDelayMs);
+    if (widget.dataset.transcriptOpen === "false") {
+      scheduleDock(config.dockDelayMs);
+    }
     welcomeTimer = setTimeout(() => {
       if (!busy) {
         setEmotion("neutral");
@@ -541,6 +780,10 @@
         if (welcomeTimer) {
           clearTimeout(welcomeTimer);
         }
+        if (comicHideTimer) {
+          clearTimeout(comicHideTimer);
+        }
+        clearDockTimer();
         widget.remove();
       },
       setState,
@@ -552,5 +795,17 @@
     };
   }
 
-  window.ChatbotWidget = { mount: mountChatbot };
+  window.ChatbotWidget = {
+    mount: mountChatbot,
+    mountForApp,
+    mountFromConfigUrl,
+  };
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", autoMountFromScriptTag, { once: true });
+    } else {
+      autoMountFromScriptTag();
+    }
+  }
 })();

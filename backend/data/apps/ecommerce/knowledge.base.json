@@ -1,0 +1,19 @@
+{
+  "appName": "ShopSmart Assistant",
+  "fallbackReply": "I can help with orders, delivery, returns, and payments. Share your order ID for faster support.",
+  "fallbackEmotion": "neutral",
+  "intents": [
+    {
+      "id": "order_status",
+      "keywords": ["order status", "track order", "where is my order", "shipment"],
+      "reply": "To track your order, share your order ID and registered phone number.",
+      "emotion": "thinking"
+    },
+    {
+      "id": "returns",
+      "keywords": ["return", "refund", "replace"],
+      "reply": "For return/refund requests, tell me the order ID and return reason. I will guide policy and timeline.",
+      "emotion": "neutral"
+    }
+  ]
+}

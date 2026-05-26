@@ -1,0 +1,19 @@
+{
+  "appName": "Campus Assistant",
+  "fallbackReply": "Thanks for your message. I can help with admissions, fees, timetable, hostel, and student support.",
+  "fallbackEmotion": "neutral",
+  "intents": [
+    {
+      "id": "admissions",
+      "keywords": ["admission", "apply", "eligibility", "intake"],
+      "reply": "For admissions, share your target program and intake month so I can guide eligibility and next steps.",
+      "emotion": "welcome"
+    },
+    {
+      "id": "fees",
+      "keywords": ["fees", "payment", "tuition", "scholarship"],
+      "reply": "For fee support, tell me your program and semester. I can map tuition, deadlines, and payment options.",
+      "emotion": "neutral"
+    }
+  ]
+}
