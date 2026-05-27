@@ -38,10 +38,23 @@ app.use(
 );
 
 const defaultKnowledge = {
+  schemaVersion: "2.0.0",
   appName: "Professional Assistant",
   fallbackReply: "Thanks for your message. Please share more detail so I can assist correctly.",
   fallbackEmotion: "neutral",
+  updatedAt: null,
+  retrieval: {
+    enabled: true,
+    minScore: 3,
+    maxContextChunks: 2,
+  },
   intents: [],
+  sources: [],
+  webIndex: {
+    generatedAt: null,
+    pages: [],
+    chunks: [],
+  },
 };
 
 const defaultConfig = {
@@ -101,6 +114,34 @@ function normalizeKeywordList(keywords) {
     .filter(Boolean);
 }
 
+function tokenize(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function editDistance(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  const dp = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[left.length][right.length];
+}
+
 function normalizeAppId(appId) {
   const value = String(appId || "").trim().toLowerCase();
   if (!/^[a-z0-9_-]+$/.test(value)) {
@@ -138,9 +179,12 @@ function normalizeIntentList(items) {
         keywords,
         reply,
         emotion: String((item && item.emotion) || "neutral").toLowerCase(),
+        priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 100,
+        source: String(item?.source || "manual"),
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a, b) => a.priority - b.priority);
 }
 
 function normalizeEmotionImages(images) {
@@ -153,6 +197,305 @@ function normalizeEmotionImages(images) {
     }
   }
   return result;
+}
+
+function stripHtml(html) {
+  const raw = String(html || "")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ");
+  return raw
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractLinks(html, pageUrl) {
+  const results = new Set();
+  const source = String(html || "");
+  const re = /href\s*=\s*["']([^"'#]+)["']/gi;
+  let match = re.exec(source);
+  while (match) {
+    const href = String(match[1] || "").trim();
+    if (href) {
+      try {
+        const absolute = new URL(href, pageUrl);
+        if (absolute.protocol === "http:" || absolute.protocol === "https:") {
+          results.add(absolute.toString());
+        }
+      } catch (error) {}
+    }
+    match = re.exec(source);
+  }
+  return Array.from(results);
+}
+
+function splitIntoChunks(text, maxLen = 650) {
+  const sentences = String(text || "").split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let current = "";
+  for (const sentence of sentences) {
+    if (!sentence) continue;
+    if ((current + " " + sentence).trim().length > maxLen) {
+      if (current.trim()) chunks.push(current.trim());
+      current = sentence;
+    } else {
+      current = `${current} ${sentence}`.trim();
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.filter((item) => item.length >= 60);
+}
+
+function extractTitle(html) {
+  const m = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return m ? stripHtml(m[1]).slice(0, 120) : "";
+}
+
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    u.hash = "";
+    if (u.pathname.endsWith("/") && u.pathname !== "/") {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.toString();
+  } catch (error) {
+    return String(url || "").trim();
+  }
+}
+
+function isLikelyUsefulText(text) {
+  const clean = String(text || "").trim();
+  if (clean.length < 120) return false;
+  const noiseSignals = ["cookie", "copyright", "privacy policy", "all rights reserved"];
+  const lower = clean.toLowerCase();
+  const penalty = noiseSignals.reduce((sum, item) => sum + (lower.includes(item) ? 1 : 0), 0);
+  return penalty < 3;
+}
+
+function sameHost(urlA, urlB) {
+  try {
+    const a = new URL(urlA);
+    const b = new URL(urlB);
+    return a.host === b.host;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function fetchWithTimeout(url, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "ChatbotPlatformCrawler/1.0",
+        Accept: "text/html, text/plain;q=0.9, application/xhtml+xml;q=0.8",
+      },
+    });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function crawlAndIndexSources(sources) {
+  const seeds = Array.from(
+    new Set(
+      (Array.isArray(sources) ? sources : [])
+        .map((item) => String(item || "").trim())
+        .filter((item) => /^https?:\/\//i.test(item))
+    )
+  );
+
+  if (!seeds.length) {
+    return { generatedAt: new Date().toISOString(), pages: [], chunks: [] };
+  }
+
+  const queue = seeds.map((url) => ({ url: normalizeUrl(url), depth: 0 }));
+  const visited = new Set();
+  const pages = [];
+  const chunks = [];
+  const maxPages = 80;
+  const maxDepth = 2;
+  const allowedHosts = new Set(seeds.map((url) => new URL(url).host));
+
+  while (queue.length && pages.length < maxPages) {
+    const current = queue.shift();
+    const url = normalizeUrl(current?.url);
+    const depth = current?.depth || 0;
+    if (!url || visited.has(url)) continue;
+    visited.add(url);
+
+    try {
+      const start = Date.now();
+      const response = await fetchWithTimeout(url);
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!response.ok || (!contentType.includes("text/html") && !contentType.includes("text/plain"))) {
+        pages.push({
+          url,
+          ok: false,
+          status: response.status,
+          contentType,
+          textChars: 0,
+          durationMs: Date.now() - start,
+        });
+        continue;
+      }
+
+      const html = await response.text();
+      const text = stripHtml(html);
+      const title = extractTitle(html);
+      pages.push({
+        url,
+        ok: true,
+        status: response.status,
+        contentType,
+        title,
+        textChars: text.length,
+        durationMs: Date.now() - start,
+      });
+
+      for (const piece of splitIntoChunks(text)) {
+        if (!isLikelyUsefulText(piece)) continue;
+        chunks.push({
+          url,
+          title,
+          text: piece,
+          tokens: tokenize(piece),
+        });
+      }
+
+      if (depth < maxDepth) {
+        const links = extractLinks(html, url).filter((link) => {
+          try {
+            const host = new URL(link).host;
+            return allowedHosts.has(host) && sameHost(link, url);
+          } catch (error) {
+            return false;
+          }
+        });
+        for (const link of links) {
+          const next = normalizeUrl(link);
+          if (!visited.has(next)) queue.push({ url: next, depth: depth + 1 });
+        }
+      }
+    } catch (error) {
+      pages.push({
+        url,
+        ok: false,
+        status: 0,
+        contentType: "",
+        textChars: 0,
+        durationMs: 0,
+        error: error.message,
+      });
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    pages,
+    chunks: chunks.slice(0, 2000),
+  };
+}
+
+function retrieveFromWebIndex(question, webIndex) {
+  const sourceChunks = Array.isArray(webIndex?.chunks) ? webIndex.chunks : [];
+  if (!sourceChunks.length) return null;
+  const qTokens = new Set(tokenize(question).filter((item) => item.length >= 3));
+  if (!qTokens.size) return null;
+
+  const tokenDocFreq = new Map();
+  for (const chunk of sourceChunks) {
+    const uniq = new Set(Array.isArray(chunk.tokens) ? chunk.tokens : tokenize(chunk.text));
+    for (const token of uniq) {
+      tokenDocFreq.set(token, (tokenDocFreq.get(token) || 0) + 1);
+    }
+  }
+
+  const scored = sourceChunks
+    .map((chunk) => {
+      const chunkTokens = Array.isArray(chunk.tokens) ? chunk.tokens : tokenize(chunk.text);
+      let score = 0;
+      for (const token of qTokens) {
+        const df = tokenDocFreq.get(token) || 1;
+        const idf = Math.log(1 + sourceChunks.length / df);
+        if (chunkTokens.includes(token)) score += 2 * idf;
+        else if (token.length >= 6 && chunkTokens.some((item) => Math.abs(item.length - token.length) <= 1 && editDistance(item, token) <= 1)) score += 1 * idf;
+      }
+      if (String(chunk.url || "").includes("/about") || String(chunk.url || "").includes("/administration")) {
+        if (qTokens.has("director") || qTokens.has("faculty")) score += 1.2;
+      }
+      if (String(chunk.url || "").includes("/admission") && (qTokens.has("admission") || qTokens.has("eligibility"))) {
+        score += 1.2;
+      }
+      return { chunk, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+  if (!scored.length) return null;
+  const top = scored.slice(0, 2).map((item) => item.chunk);
+  const sources = Array.from(new Set(top.map((item) => item.url))).slice(0, 2);
+  const sentences = [];
+  for (const chunk of top) {
+    const parts = String(chunk.text || "").split(/(?<=[.!?])\s+/);
+    for (const part of parts) {
+      const p = part.trim();
+      if (!p || p.length < 45 || p.length > 240) continue;
+      const tokens = tokenize(p);
+      let overlap = 0;
+      for (const token of qTokens) {
+        if (tokens.includes(token)) overlap += 1;
+      }
+      if (overlap > 0) sentences.push({ p, overlap });
+    }
+  }
+  const summary = (sentences.length ? sentences.sort((a, b) => b.overlap - a.overlap).slice(0, 3).map((x) => x.p) : top
+    .map((item) => item.text.slice(0, 220)))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!summary || summary.length < 60) {
+    return null;
+  }
+  const reply = `${summary}\n\nSources:\n- ${sources.join("\n- ")}`;
+  return { reply, emotion: "thinking", score: scored[0].score };
+}
+
+function toProfessionalKnowledge(rawKnowledge) {
+  const source = rawKnowledge && typeof rawKnowledge === "object" ? rawKnowledge : {};
+  const intents = normalizeIntentList(source.intents);
+  const sources = Array.isArray(source.sources) ? source.sources.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  return {
+    schemaVersion: "2.0.0",
+    appName: String(source.appName || defaultKnowledge.appName).trim(),
+    fallbackReply: String(source.fallbackReply || defaultKnowledge.fallbackReply).trim(),
+    fallbackEmotion: String(source.fallbackEmotion || defaultKnowledge.fallbackEmotion).toLowerCase(),
+    updatedAt: source.updatedAt || new Date().toISOString(),
+    retrieval: {
+      enabled: source.retrieval?.enabled !== false,
+      minScore: Number.isFinite(Number(source.retrieval?.minScore)) ? Number(source.retrieval.minScore) : defaultKnowledge.retrieval.minScore,
+      maxContextChunks: Number.isFinite(Number(source.retrieval?.maxContextChunks))
+        ? Number(source.retrieval.maxContextChunks)
+        : defaultKnowledge.retrieval.maxContextChunks,
+    },
+    intents,
+    sources,
+    webIndex: source.webIndex && typeof source.webIndex === "object"
+      ? source.webIndex
+      : { generatedAt: null, pages: [], chunks: [] },
+  };
 }
 
 async function ensureAppDirectory(appId) {
@@ -215,7 +558,7 @@ async function resolveAppRuntime(appId) {
 
   return {
     appId: safeAppId,
-    knowledge: { ...defaultKnowledge, ...(knowledge || {}) },
+    knowledge: toProfessionalKnowledge({ ...defaultKnowledge, ...(knowledge || {}) }),
     config: finalConfig,
   };
 }
@@ -239,14 +582,36 @@ function resolveEmotion(message, failed, matchedEmotion, fallbackEmotion) {
 }
 
 function matchIntent(message, knowledge) {
-  const text = String(message || "").toLowerCase();
+  const text = String(message || "").toLowerCase().trim();
   if (!text) {
     return null;
   }
+  const words = tokenize(text);
 
-  for (const intent of knowledge.intents || []) {
+  const sortedIntents = Array.isArray(knowledge.intents)
+    ? [...knowledge.intents].sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100))
+    : [];
+  for (const intent of sortedIntents) {
     const keywords = normalizeKeywordList(intent.keywords);
-    if (keywords.some((word) => text.includes(word))) {
+    const matched = keywords.some((keyword) => {
+      if (text.includes(keyword)) {
+        return true;
+      }
+      if (keyword.length >= 5) {
+        return words.some((word) => {
+          if (word === keyword) {
+            return true;
+          }
+          if (Math.abs(word.length - keyword.length) > 1) {
+            return false;
+          }
+          return editDistance(word, keyword) <= 1;
+        });
+      }
+      return false;
+    });
+
+    if (matched) {
       return {
         reply: String(intent.reply || knowledge.fallbackReply),
         emotion: String(intent.emotion || "neutral").toLowerCase(),
@@ -300,13 +665,15 @@ app.post("/api/apps", async (req, res) => {
       emotionImages: normalizeEmotionImages(body.emotionImages),
     };
     const knowledge = {
-      ...defaultKnowledge,
+      ...toProfessionalKnowledge(defaultKnowledge),
       appName: String(body.appName || body.title || defaultKnowledge.appName).trim(),
       fallbackReply: String(body.fallbackReply || defaultKnowledge.fallbackReply).trim(),
       fallbackEmotion: String(body.fallbackEmotion || defaultKnowledge.fallbackEmotion).toLowerCase(),
+      updatedAt: new Date().toISOString(),
       sources: Array.isArray(body.sources) ? body.sources.map((item) => String(item || "").trim()).filter(Boolean) : [],
       intents: normalizeIntentList(body.intents),
     };
+    knowledge.webIndex = await crawlAndIndexSources(knowledge.sources);
 
     await writeJsonToFile(path.join(appDir, "widget.config.json"), config);
     await writeJsonToFile(path.join(appDir, "knowledge.base.json"), knowledge);
@@ -330,6 +697,25 @@ app.get("/api/apps/:appId", async (req, res) => {
       config: runtime.config,
       knowledge: runtime.knowledge,
       embedCode: buildEmbedCode(getPublicBaseUrl(req), runtime.appId),
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/apps/:appId/reindex", async (req, res) => {
+  try {
+    const { safeAppId, appDir } = await ensureAppDirectory(req.params.appId);
+    const currentKnowledge = (await tryReadJson(path.join(appDir, "knowledge.base.json"))) || defaultKnowledge;
+    const nextKnowledge = toProfessionalKnowledge(currentKnowledge);
+    nextKnowledge.updatedAt = new Date().toISOString();
+    nextKnowledge.webIndex = await crawlAndIndexSources(nextKnowledge.sources || []);
+    await writeJsonToFile(path.join(appDir, "knowledge.base.json"), nextKnowledge);
+    return res.json({
+      appId: safeAppId,
+      indexedPages: nextKnowledge.webIndex.pages.length,
+      indexedChunks: nextKnowledge.webIndex.chunks.length,
+      generatedAt: nextKnowledge.webIndex.generatedAt,
     });
   } catch (error) {
     return res.status(400).json({ error: error.message });
@@ -360,15 +746,21 @@ app.put("/api/apps/:appId/knowledge", async (req, res) => {
     const currentKnowledge = (await tryReadJson(path.join(appDir, "knowledge.base.json"))) || defaultKnowledge;
     const body = req.body || {};
     const nextKnowledge = {
-      ...currentKnowledge,
+      ...toProfessionalKnowledge(currentKnowledge),
       appName: String(body.appName || currentKnowledge.appName || defaultKnowledge.appName).trim(),
       fallbackReply: String(body.fallbackReply || currentKnowledge.fallbackReply || defaultKnowledge.fallbackReply).trim(),
       fallbackEmotion: String(body.fallbackEmotion || currentKnowledge.fallbackEmotion || "neutral").toLowerCase(),
+      updatedAt: new Date().toISOString(),
       sources: Array.isArray(body.sources)
         ? body.sources.map((item) => String(item || "").trim()).filter(Boolean)
         : currentKnowledge.sources || [],
       intents: Array.isArray(body.intents) ? normalizeIntentList(body.intents) : currentKnowledge.intents || [],
     };
+    if (Array.isArray(body.sources)) {
+      nextKnowledge.webIndex = await crawlAndIndexSources(nextKnowledge.sources);
+    } else {
+      nextKnowledge.webIndex = currentKnowledge.webIndex || defaultKnowledge.webIndex;
+    }
     await writeJsonToFile(path.join(appDir, "knowledge.base.json"), nextKnowledge);
     return res.json({ appId: safeAppId, knowledge: nextKnowledge });
   } catch (error) {
@@ -407,13 +799,17 @@ app.post("/api/apps/:appId/chat", async (req, res) => {
   try {
     const runtime = await resolveAppRuntime(req.params.appId);
     const matched = matchIntent(message, runtime.knowledge);
+    const fromWeb = matched || runtime.knowledge.retrieval?.enabled === false
+      ? null
+      : retrieveFromWebIndex(message, runtime.knowledge.webIndex);
+    const canUseWeb = fromWeb && fromWeb.score >= Number(runtime.knowledge.retrieval?.minScore || 2);
     const reply = matched
       ? matched.reply
-      : String(runtime.knowledge.fallbackReply || "I received your message.");
+      : (canUseWeb && fromWeb.reply) || String(runtime.knowledge.fallbackReply || "I received your message.");
     const emotion = resolveEmotion(
       message,
       false,
-      matched ? matched.emotion : null,
+      matched ? matched.emotion : (canUseWeb ? fromWeb.emotion : null),
       runtime.knowledge.fallbackEmotion
     );
     return res.json({ reply, emotion, appId: runtime.appId });
@@ -439,13 +835,17 @@ app.post("/api/chat", async (req, res) => {
   try {
     const runtime = await resolveAppRuntime(DEFAULT_APP_ID);
     const matched = matchIntent(message, runtime.knowledge);
+    const fromWeb = matched || runtime.knowledge.retrieval?.enabled === false
+      ? null
+      : retrieveFromWebIndex(message, runtime.knowledge.webIndex);
+    const canUseWeb = fromWeb && fromWeb.score >= Number(runtime.knowledge.retrieval?.minScore || 2);
     const reply = matched
       ? matched.reply
-      : String(runtime.knowledge.fallbackReply || "I received your message.");
+      : (canUseWeb && fromWeb.reply) || String(runtime.knowledge.fallbackReply || "I received your message.");
     const emotion = resolveEmotion(
       message,
       false,
-      matched ? matched.emotion : null,
+      matched ? matched.emotion : (canUseWeb ? fromWeb.emotion : null),
       runtime.knowledge.fallbackEmotion
     );
     return res.json({ reply, emotion, appId: runtime.appId });

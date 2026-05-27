@@ -1,0 +1,12 @@
+{
+  "title": "IIITR Help Desk",
+  "subtitle": "Admissions, Academics, Campus Support",
+  "placeholder": "Ask about admissions, fees, hostel, placements, contact...",
+  "welcomeMessage": "Hi! I can help with IIIT Raichur admissions, academics, fees, hostel, placements, and contact details.",
+  "useEmotionImages": true,
+  "hideTranscriptByDefault": true,
+  "startTranscriptOpen": false,
+  "returningGreeting": "Welcome back. How can I help?",
+  "apiUrl": "/api/apps/iiitr/chat",
+  "emotionImages": {}
+}
